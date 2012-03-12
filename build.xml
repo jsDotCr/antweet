@@ -13,26 +13,32 @@
 
     <!-- timestamp -->
     <target name="unix-timestamp">
-        <script language="javascript">
-            <![CDATA[
-    property = project.setProperty("now",Math.floor((new Date()).getTime()/1000));
-    ]]>
-        </script>
+        <script language="javascript"><![CDATA[
+            property = project.setProperty("timestamp",Math.floor((new Date()).getTime()/1000));
+        ]]></script>
     </target>
 
     <target name="init" depends="unix-timestamp">
         <property file="auth.properties"/>
         <property name="message" value="Testing Twitter API via ANT." />
+        <script language="javascript" src="oauth.js"/>
     </target>
 
-    <target name="post" depends="init" description="Sending the tweet">
+    <target name="oauth-nonce">
+        <script language="javascript"><![CDATA[
+            property = project.setProperty("oauth.nonce", OAuth.nonce(6));
+        ]]></script>
+    </target>
+
+    <target name="post" depends="init, oauth-nonce" description="Sending the tweet">
+        <echo message="${oauth.nonce}" />
         <http url="http://api.twitter.com/1/statuses/update.json" method="POST" expected="200" failonunexpected="true">
             <headers>
                 <header name="Authorization" value="OAuth oauth_consumer_key='${twitter.consumer-key}',
                     oauth_nonce='**********************',
                     oauth_signature='**********************',
                     oauth_signature_method='HMAC-SHA1',
-                    oauth_timestamp='${now}',
+                    oauth_timestamp='${timestamp}',
                     oauth_token='******************',
                     oauth_version='1.0'" />
             </headers>
