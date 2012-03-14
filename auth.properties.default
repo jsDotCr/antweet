@@ -1,2 +1,5 @@
 twitter.username=usernametouse
 twitter.consumer-key=yourconsumerkey
+twitter.consumer-secret=consumersecretkey
+twitter.access-token=youraccesstoken
+twitter.access-token-secret=yoursecretaccesstoken
