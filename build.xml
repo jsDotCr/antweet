@@ -18,21 +18,9 @@
         ]]></script>
     </target>
 
-    <target name="init" depends="unix-timestamp">
-        <property file="auth.properties"/>
-        <property name="message" value="This is just a tweet test." />
-        <property name="base-url" value="https://api.twitter.com/1/statuses/update.json"/>
-        <script language="javascript" src="oauth.js"/>
-    </target>
-
-    <target name="encode-message">
+	<!-- nonce -->
+	<target name="oauth-nonce">
 		<script language="javascript"><![CDATA[
-			project.setProperty("pctencode.message", encodeURIComponent(project.getProperty("message")));
-		]]></script>
-    </target>
-
-    <target name="oauth-nonce">
-        <script language="javascript"><![CDATA[
             var chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz";
             var result = "";
             for (var i = 0; i < 32; ++i) {
@@ -41,11 +29,56 @@
             }
             property = project.setProperty("oauth.nonce", result);
         ]]></script>
+	</target>
+
+	<!-- percent-encoding message -->
+	<target name="encode-message">
+		<fail unless="message" message="No tweet has been passed to ant2twitter! Please provide a property named 'message'." />
+		<script language="javascript"><![CDATA[
+			var msg = encodeURIComponent(project.getProperty("message")).replace(/[\!\*\(\)\']/g, function(r){
+				switch(r){
+					case "!":
+						return "%21";
+						break;
+					case "*":
+						return "%2A";
+						break;
+					case "(":
+						return "%28";
+						break;
+					case ")":
+						return "%29";
+						break;
+					case "'":
+						return "%27";
+						break;
+				}
+			});
+			project.setProperty("pctencode.message", msg);
+		]]></script>
+	</target>
+
+    <target name="init" depends="unix-timestamp, encode-message, oauth-nonce">
+        <property file="auth.properties"/>
+        <property name="url" value="https://api.twitter.com/1/statuses/update.json"/>
     </target>
 
     <target name="oauth-sign">
+		<fail message="Missing basic twitter API keys!">
+			<condition>
+				<not>
+					<and>
+						<isset property="twitter.consumer-key"/>
+						<isset property="twitter.consumer-secret"/>
+						<isset property="twitter.access-token"/>
+						<isset property="twitter.access-token-secret"/>
+					</and>
+				</not>
+			</condition>
+		</fail>
+
 		<script language="javascript"><![CDATA[
-			project.setProperty("signature", "POST&" + encodeURIComponent(project.getProperty("base-url")) + "&" + encodeURIComponent("include_entities=true&oauth_consumer_key=" + project.getProperty("twitter.consumer-key") + "&oauth_nonce=" + project.getProperty("oauth.nonce") + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + project.getProperty("timestamp") + "&oauth_token=" + project.getProperty("twitter.access-token") + "&oauth_version=1.0&status=" + project.getProperty("pctencode.message")));
+			project.setProperty("signature", "POST&" + encodeURIComponent(project.getProperty("url")) + "&" + encodeURIComponent("oauth_consumer_key=" + project.getProperty("twitter.consumer-key") + "&oauth_nonce=" + project.getProperty("oauth.nonce") + "&oauth_signature_method=HMAC-SHA1&oauth_timestamp=" + project.getProperty("timestamp") + "&oauth_token=" + project.getProperty("twitter.access-token") + "&oauth_version=1.0&status=" + project.getProperty("pctencode.message") + "&trim_user=1"));
 			project.setProperty("signing-key", project.getProperty("twitter.consumer-secret") + "&" + project.getProperty("twitter.access-token-secret"));
 		]]></script>
 
@@ -62,17 +95,16 @@
 			var hmac = Crypto.util.bytesToBase64(Crypto.HMAC(Crypto.SHA1, project.getProperty("signature"), project.getProperty("signing-key"), { asBytes: true }));
 			property = project.setProperty("pctencoded.oauth.signature", encodeURIComponent(hmac));
 		]]></script>
-		<echo message="${signature}" />
     </target>
 
-    <target name="post" depends="init, encode-message, oauth-nonce, oauth-sign" description="Sending the tweet">
-        <http url="${base-url}" method="POST" expected="200" failonunexpected="true">
+    <target name="post" depends="init, oauth-sign" description="Sending the tweet">
+        <http url="${url}" method="POST" expected="200" failonunexpected="true" printrequestheaders="false" printresponseheaders="false">
             <headers>
                 <header name="Authorization" value='OAuth oauth_consumer_key="${twitter.consumer-key}", oauth_nonce="${oauth.nonce}", oauth_signature="${pctencoded.oauth.signature}", oauth_signature_method="HMAC-SHA1", oauth_timestamp="${timestamp}", oauth_token="${twitter.access-token}", oauth_version="1.0"'/>
             </headers>
             <query>
-				<parameter name="include_entities" value="true" />
                 <parameter name="status" value="${message}" />
+                <parameter name="trim_user" value="1" />
             </query>
         </http>
         <!-- post: status -->
